@@ -1,0 +1,447 @@
+// VegaProfit — Prisma schema (PostgreSQL).
+// Multi-tenant from day one: every business table carries `shop` (myshopify domain).
+// Money is Decimal; currency is stored next to amounts where it can differ (Meta spend is USD).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Shopify auth session (required by @shopify/shopify-app-session-storage-prisma)
+// ---------------------------------------------------------------------------
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+
+  @@index([shop])
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+// COD lifecycle derived from Shopify state (mapping in docs/DECISIONS.md, editable in Setting).
+enum OrderLifecycle {
+  PLACED              // unfulfilled, not cancelled
+  IN_TRANSIT          // fulfilled + financial PENDING
+  DELIVERED           // financial PAID (delivered and cash collected)
+  CANCELLED           // voided/cancelled, never fulfilled
+  RETURNED            // voided/cancelled after fulfillment (refused or returned)
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum AttributionMethod {
+  ID        // campaign/adset/ad ids found in UTMs
+  NAME_MAP  // resolved through UtmNameMap
+  URL_PARSE // recovered from landing URL / note attributes
+  NONE      // unattributed (always shown in UI)
+}
+
+enum MetaLevel {
+  CAMPAIGN
+  ADSET
+  AD
+}
+
+enum Verdict {
+  KILL
+  PAUSE
+  WATCH
+  CALENDAR
+  SCALE
+}
+
+enum TrackingHealth {
+  GREEN
+  ORANGE
+  RED
+}
+
+// ---------------------------------------------------------------------------
+// Shop + settings
+// ---------------------------------------------------------------------------
+model Shop {
+  shop            String   @id // e.g. vegalife.myshopify.com
+  currency        String   @default("TND")
+  timezone        String   @default("Africa/Tunis")
+  installedAt     DateTime @default(now())
+  lastFullSyncAt  DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  settings   Setting[]
+  orders     Order[]
+  metaAccounts MetaAccount[]
+}
+
+// Key/value settings per shop (thresholds, status mapping, tolerances...). Value is JSON.
+// Defaults live in code (app/lib/settings/defaults.ts, added in M3) and are overridden here.
+model Setting {
+  id        String   @id @default(cuid())
+  shop      String
+  key       String
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shopRef Shop @relation(fields: [shop], references: [shop], onDelete: Cascade)
+
+  @@unique([shop, key])
+}
+
+// ---------------------------------------------------------------------------
+// Orders
+// ---------------------------------------------------------------------------
+model Order {
+  id                 String         @id @default(cuid())
+  shop               String
+  shopifyOrderId     String         // numeric id from the GID
+  name               String         // "#2126"
+  createdAtShopify   DateTime
+  cancelledAt        DateTime?
+  cancelReason       String?
+  financialStatus    String         // PENDING | PAID | VOIDED | REFUNDED | PARTIALLY_REFUNDED ...
+  fulfillmentStatus  String         // UNFULFILLED | FULFILLED | PARTIALLY_FULFILLED ...
+  fulfilledAt        DateTime?
+  paidAt             DateTime?      // set when we first observe PAID
+  lifecycle          OrderLifecycle @default(PLACED)
+  currency           String         @default("TND")
+  totalPrice         Decimal        @db.Decimal(14, 3)
+  totalRefunded      Decimal        @default(0) @db.Decimal(14, 3)
+  shippingPrice      Decimal        @default(0) @db.Decimal(14, 3)
+  discountTotal      Decimal        @default(0) @db.Decimal(14, 3)
+  phoneHash          String?        // sha256 of normalized phone, for duplicate detection (never the raw number)
+  emailHash          String?
+  customerId         String?
+  tags               String[]
+  // Raw attribution inputs, kept for traceability
+  rawUtm             Json?          // { source, medium, campaign, content, term, id }
+  landingUrl         String?
+  possibleDuplicateOf String?       // Order.id of the earlier probable duplicate (never auto-deleted)
+  // Manual exclusion: fake/test/spam orders are removed from profit, true purchases and reversal rates.
+  excluded           Boolean        @default(false)
+  excludedReason     String?        // fake | test | spam | duplicate
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  shopRef      Shop                 @relation(fields: [shop], references: [shop], onDelete: Cascade)
+  lines        OrderLine[]
+  history      OrderStatusHistory[]
+  refunds      Refund[]
+  attribution  OrderAttribution?
+
+  @@unique([shop, shopifyOrderId])
+  @@index([shop, createdAtShopify])
+  @@index([shop, lifecycle])
+  @@index([shop, excluded])
+  @@index([shop, phoneHash, createdAtShopify])
+}
+
+model OrderLine {
+  id             String   @id @default(cuid())
+  shop           String
+  orderId        String
+  shopifyLineId  String
+  productId      String?
+  variantId      String?
+  sku            String?
+  title          String
+  quantity       Int
+  unitPrice      Decimal  @db.Decimal(14, 3)
+  discount       Decimal  @default(0) @db.Decimal(14, 3)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, shopifyLineId])
+  @@index([shop, variantId])
+}
+
+// Every observed lifecycle change; lets us show "why" and compute reversal timing curves.
+model OrderStatusHistory {
+  id          String         @id @default(cuid())
+  shop        String
+  orderId     String
+  fromStatus  OrderLifecycle?
+  toStatus    OrderLifecycle
+  observedAt  DateTime       @default(now())
+  source      String         // webhook | nightly_recheck | bulk_import | manual_import
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([shop, orderId, observedAt])
+}
+
+model Refund {
+  id              String   @id @default(cuid())
+  shop            String
+  orderId         String
+  shopifyRefundId String
+  amount          Decimal  @db.Decimal(14, 3)
+  note            String?
+  refundedAt      DateTime
+  createdAt       DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([shop, shopifyRefundId])
+}
+
+// ---------------------------------------------------------------------------
+// Costs
+// ---------------------------------------------------------------------------
+model ProductVariantCost {
+  id          String    @id @default(cuid())
+  shop        String
+  variantId   String
+  productId   String?
+  title       String?
+  unitCost    Decimal   @db.Decimal(14, 3) // COGS per unit
+  minQuantity Int       @default(1)         // cost-by-quantity tiers (use highest tier <= qty)
+  effectiveFrom DateTime @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([shop, variantId, minQuantity, effectiveFrom])
+  @@index([shop, variantId])
+}
+
+model ShippingRule {
+  id         String   @id @default(cuid())
+  shop       String
+  name       String
+  kind       String   // flat | by_weight | per_order_cod_fee
+  amount     Decimal  @db.Decimal(14, 3)
+  config     Json?    // e.g. weight brackets
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([shop])
+}
+
+model Expense {
+  id         String    @id @default(cuid())
+  shop       String
+  label      String
+  amount     Decimal   @db.Decimal(14, 3)
+  currency   String    @default("TND")
+  recurrence String    @default("one_off") // one_off | monthly | weekly
+  startDate  DateTime
+  endDate    DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([shop, startDate])
+}
+
+// Manual FX history: how many `quote` per 1 `base` from `effectiveFrom`.
+model FxRate {
+  id            String   @id @default(cuid())
+  shop          String
+  base          String   @default("USD")
+  quote         String   @default("TND")
+  rate          Decimal  @db.Decimal(14, 6)
+  effectiveFrom DateTime
+  createdAt     DateTime @default(now())
+
+  @@unique([shop, base, quote, effectiveFrom])
+}
+
+// ---------------------------------------------------------------------------
+// Meta (Marketing API). Ids are Meta's numeric strings.
+// ---------------------------------------------------------------------------
+model MetaAccount {
+  id           String   @id @default(cuid())
+  shop         String
+  adAccountId  String   // numeric, without act_
+  pixelId      String?
+  currency     String   @default("USD")
+  active       Boolean  @default(true)
+  lastSyncAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  shopRef Shop @relation(fields: [shop], references: [shop], onDelete: Cascade)
+
+  @@unique([shop, adAccountId])
+}
+
+model MetaCampaign {
+  id          String   @id @default(cuid())
+  shop        String
+  metaId      String
+  name        String
+  status      String?
+  objective   String?
+  dailyBudget Decimal? @db.Decimal(14, 3)
+  startTime   DateTime?
+  endTime     DateTime? // planned end date, feeds the calendar
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  adSets MetaAdSet[]
+
+  @@unique([shop, metaId])
+}
+
+model MetaAdSet {
+  id          String   @id @default(cuid())
+  shop        String
+  metaId      String
+  campaignId  String   // MetaCampaign.id
+  name        String
+  status      String?
+  dailyBudget Decimal? @db.Decimal(14, 3)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  campaign MetaCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  ads      MetaAd[]
+
+  @@unique([shop, metaId])
+}
+
+model MetaAd {
+  id         String   @id @default(cuid())
+  shop       String
+  metaId     String
+  adSetId    String   // MetaAdSet.id
+  name       String
+  status     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  adSet MetaAdSet @relation(fields: [adSetId], references: [id], onDelete: Cascade)
+
+  @@unique([shop, metaId])
+}
+
+// One row per entity per day. Spend is stored in the ad account currency (USD) and converted
+// with FxRate at read time, so changing a past rate never needs a re-sync.
+model MetaInsightsDaily {
+  id               String    @id @default(cuid())
+  shop             String
+  level            MetaLevel
+  entityMetaId     String
+  date             DateTime  @db.Date
+  spend            Decimal   @db.Decimal(14, 4)
+  currency         String    @default("USD")
+  impressions      Int       @default(0)
+  clicks           Int       @default(0)
+  frequency        Decimal?  @db.Decimal(8, 4)
+  metaPurchases    Int       @default(0)
+  metaPurchaseValue Decimal  @default(0) @db.Decimal(14, 4)
+  attributionWindow String   @default("7d_click,1d_view")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([shop, level, entityMetaId, date, attributionWindow])
+  @@index([shop, date])
+}
+
+// ---------------------------------------------------------------------------
+// Attribution (Shopify order -> Meta entity)
+// ---------------------------------------------------------------------------
+model OrderAttribution {
+  id          String            @id @default(cuid())
+  shop        String
+  orderId     String            @unique
+  campaignId  String?           // Meta numeric ids
+  adSetId     String?
+  adId        String?
+  method      AttributionMethod @default(NONE)
+  resolvedAt  DateTime          @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([shop, campaignId])
+  @@index([shop, adSetId])
+  @@index([shop, adId])
+}
+
+// Fallback when UTMs hold names instead of ids (e.g. content = "Facebook_UA").
+model UtmNameMap {
+  id         String   @id @default(cuid())
+  shop       String
+  field      String   // campaign | content | term
+  utmValue   String
+  level      MetaLevel
+  metaId     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([shop, field, utmValue])
+}
+
+// ---------------------------------------------------------------------------
+// Truth layer, decisions, calendar
+// ---------------------------------------------------------------------------
+model TrackingHealthSnapshot {
+  id              String         @id @default(cuid())
+  shop            String
+  level           MetaLevel
+  entityMetaId    String?        // null = account-wide
+  periodStart     DateTime       @db.Date
+  periodEnd       DateTime       @db.Date
+  metaPurchases   Int
+  shopifyOrders   Int            // distinct attributed orders, non-reversed
+  duplicationRatio Decimal?      @db.Decimal(8, 4)
+  status          TrackingHealth
+  evidence        Json?          // order ids, phone-duplicate pairs, dataset diagnostics
+  createdAt       DateTime       @default(now())
+
+  @@index([shop, periodEnd])
+}
+
+model VerdictHistory {
+  id            String    @id @default(cuid())
+  shop          String
+  level         MetaLevel
+  entityMetaId  String
+  verdict       Verdict
+  reason        String
+  metrics       Json      // snapshot of the inputs (true CPA, break-even CPA, orders, spend...)
+  nextReviewDate DateTime? @db.Date
+  computedAt    DateTime  @default(now())
+
+  @@index([shop, level, entityMetaId, computedAt])
+}
+
+model ReviewCalendarEvent {
+  id            String    @id @default(cuid())
+  shop          String
+  level         MetaLevel?
+  entityMetaId  String?
+  date          DateTime  @db.Date
+  kind          String    // review | campaign_end | seasonal_window | learning_window_end
+  title         String
+  note          String?
+  done          Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([shop, date])
+}

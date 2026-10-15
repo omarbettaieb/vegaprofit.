@@ -1,0 +1,31 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "52884f57142a58b2d9a9424b1fa252c2"
+application_url = "https://example.com"
+embedded = true
+name = "vegaprofit"
+
+[access_scopes]
+# Read-only. read_all_orders (orders older than 60 days) needs Shopify approval; not requested for now.
+scopes = "read_orders,read_products,read_customers,read_fulfillments"
+
+[webhooks]
+api_version = "2026-10"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  # Order webhooks (/webhooks/orders: orders/create, orders/updated, orders/cancelled, orders/edited,
+  # refunds/create) are switched off for now: Shopify only allows them once the app is approved for
+  # protected customer data. Order changes are picked up by the re-check on app open instead.
+
+[auth]
+redirect_urls = [ "https://example.com/api/auth" ]
+
+[build]
+automatically_update_urls_on_dev = true
