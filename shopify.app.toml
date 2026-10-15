@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "52884f57142a58b2d9a9424b1fa252c2"
-application_url = "https://example.com"
+application_url = "https://vegaprofit.onrender.com"
 embedded = true
 name = "vegaprofit"
 
@@ -21,11 +21,15 @@ api_version = "2026-10"
   topics = [ "app/scopes_update" ]
 
   # Order webhooks (/webhooks/orders: orders/create, orders/updated, orders/cancelled, orders/edited,
-  # refunds/create) are switched off for now: Shopify only allows them once the app is approved for
-  # protected customer data. Order changes are picked up by the re-check on app open instead.
+  # refunds/create) are switched off for now until protected customer data access is confirmed.
+  # Order changes are picked up by the re-check on app open instead.
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [
+  "https://vegaprofit.onrender.com/auth/callback",
+  "https://vegaprofit.onrender.com/auth/shopify/callback",
+  "https://vegaprofit.onrender.com/api/auth/callback"
+]
 
 [build]
 automatically_update_urls_on_dev = true

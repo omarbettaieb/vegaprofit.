@@ -10,6 +10,8 @@ export const SETTING_DEFAULTS = {
   fake_qty_threshold: 5, // fake-order heuristic: quantity at or above this...
   fake_ticket_multiple: 4, // ...and total at or above N x the median ticket
   fake_cancel_window_hours: 72, // ...and cancelled within N hours => "likely fake"
+  fee_out: 0, // courier fee in TND for every shipped parcel (set on the Costs page)
+  fee_return: 0, // extra courier fee in TND when a parcel comes back
 } as const;
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;

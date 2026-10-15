@@ -1,6 +1,6 @@
 # VegaProfit — decisions log
 
-Status: Milestone 2 (Shopify sync). Updated 2026-10-15.
+Status: Milestone 3 (costs and profit). Updated 2026-10-15.
 
 ## Approved by Omar (14 Oct 2026)
 
@@ -84,8 +84,26 @@ Omar stopped using EasySell and uses Meta Conversions API (sender not yet identi
 - Services, routes and the Sync page: written but **not type-checked or run** (packages cannot be installed in the build sandbox). Omar runs `npm run typecheck` locally.
 - Not yet tested against a live Shopify install (needs the app installed; see README).
 
+## Corrections to the M2 notes (found while installing, 15 Oct 2026)
+- **Webhooks are OFF.** Shopify refuses order/refund webhook subscriptions until the app is approved for protected customer data (error on `shopify app dev`). The `/webhooks/orders` route stays in the code but `shopify.app.toml` has no subscription for it. Changes are picked up by the re-check on app open (older than 12 h) and the manual button. Re-enable later once access is confirmed.
+- **`read_all_orders` is not granted** (dev preview refused it). The app sees the last 60 days only (91 of 1,129 orders). Scopes now: read_orders, read_products, read_customers, read_fulfillments. Requesting more history is a separate Shopify request.
+- **Protected customer data:** the dev-store preview refuses the Order object ("not approved to access the Order object"). It works on the live store through the custom-distribution install. The Dev Dashboard shows no "API access requests" page for this app.
+- **`shopify.web.toml.liquid` must be rendered** into `shopify.web.toml`, otherwise `shopify app dev` starts no web process and the app URL stays `example.com`.
+- **`config link` overwrites the toml** (empty scopes, newer webhook api_version). Always re-check `shopify.app.toml` after linking.
+- **Hosting (done):** Render free web service (Docker) at https://vegaprofit.onrender.com plus Neon free Postgres. App is custom-distributed to dfafa4.myshopify.com (permanent). Do not run `npm run dev` against this app any more: it rewrites URLs. Release config with `npx shopify app deploy`.
+- Render free sleeps after 15 min idle (about 1 min to wake).
+
+## Milestone 3 decisions (15 Oct 2026)
+- **Delivery:** fixed courier fee per shipped parcel (`fee_out`). A returned or refused parcel costs `fee_out + fee_return` (both ways), the product returns to stock (no COGS, no revenue). Returned-parcel losses count in BOTH views because it is real money. Cancelled-before-shipping orders cost nothing.
+- **Views:** gross = everything not cancelled/returned (placed, in transit, delivered, partially refunded; projects the courier fee for unshipped parcels); net = delivered money only.
+- **Revenue** = order total (includes shipping charged to the customer) minus refunds. Orders belong to the day they were placed in Tunisia time (Africa/Tunis, UTC+1).
+- **Product cost:** typed in the app per variant. First entry applies to all history; a later change applies from today so past orders keep the old cost. Orders with a product lacking a cost are flagged ("profit overstated"). Cost tiers by quantity are not used yet.
+- **Expenses:** one-off, monthly (spread evenly over the days of the month) or weekly (one seventh per day), optional end date. TND only.
+- **Profit before ads:** ad spend arrives with M4.
+- Excluded (fake) orders never count.
+
 ## Open items
-1. **Pixel / dataset ID** still missing (needed from M4). 1630583147626333 is the *ad account* id. Events Manager > Data sources > dataset, or Shopify admin > Facebook & Instagram > Settings > data sharing.
-2. **Hosting** for the always-on version: Render free web service + Neon free Postgres (do not use Render's own free Postgres, it expires after 30 days). The laptop is enough while building. Render free sleeps after 15 min idle (about 1 min to wake), which the catch-up re-check covers.
-3. **Install path**: dev store first (fast feedback, free), then live store through custom distribution on a hosted URL.
-4. `shopify.app.toml` has an empty `client_id` until `npm run config:link` writes it. Never overwrite a linked toml with the copy from an archive without re-checking `client_id`.
+1. **Pixel / dataset ID** still missing (needed from M4).
+2. **Webhooks and older order history** depend on Shopify access (see corrections above).
+3. Ad account currency and FX (M4).
+4. `shopify.app.toml` has the Render URL; keep it.

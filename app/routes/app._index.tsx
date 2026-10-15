@@ -12,12 +12,14 @@ export default function Home() {
     <s-page heading="VegaProfit">
       <s-section heading="Where things stand">
         <s-paragraph>
-          Profit and Meta-ads decisions for your store. This version syncs your orders and tracks their real status
-          (placed, in transit, delivered, cancelled, returned). Profit, Meta spend and the KILL / PAUSE / WATCH / CALENDAR
-          / SCALE decisions arrive in the next milestones.
+          Profit and Meta-ads decisions for your store. This version syncs your orders, tracks their real status
+          (placed, in transit, delivered, cancelled, returned) and shows your profit day by day from your product costs,
+          delivery fees and expenses. Meta spend and the KILL / PAUSE / WATCH / CALENDAR / SCALE decisions arrive in the
+          next milestones.
         </s-paragraph>
         <s-paragraph>
-          <s-link href="/app/sync">Open the orders sync page</s-link>
+          <s-link href="/app/profit">Profit</s-link> · <s-link href="/app/costs">Costs</s-link> ·{" "}
+          <s-link href="/app/sync">Orders sync</s-link>
         </s-paragraph>
       </s-section>
     </s-page>

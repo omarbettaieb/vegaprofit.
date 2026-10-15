@@ -128,8 +128,8 @@ export default function SyncPage() {
           </s-button>
         </s-stack>
         <s-paragraph>
-          New and changed orders also arrive automatically (webhooks). Re-check runs by itself when you open the app
-          and the last check is older than 12 hours, so late cancellations and returns are not missed.
+          Re-check runs by itself when you open the app and the last check is older than 12 hours, so new orders,
+          late cancellations and returns are picked up. You can also click the button above at any time.
         </s-paragraph>
       </s-section>
 
