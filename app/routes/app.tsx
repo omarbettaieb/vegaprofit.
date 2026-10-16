@@ -5,6 +5,7 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
 import { authenticate } from "../shopify.server";
 import { catchUpIfDue } from "../services/orderSync.server";
+import { metaSyncIfDue } from "../services/meta.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -12,6 +13,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Re-check recent orders in the background when the last check is stale (late cancellations/returns,
   // missed webhooks). Never blocks the page; does nothing until the first full import has run.
   void catchUpIfDue(admin, session.shop).catch((e) => console.error("[catch-up] failed", e));
+
+  void metaSyncIfDue(session.shop).catch((e) => console.error("[meta-sync] failed", e));
 
   // eslint-disable-next-line no-undef
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
@@ -25,6 +28,7 @@ export default function App() {
       <s-app-nav>
         <s-link href="/app">Home</s-link>
         <s-link href="/app/profit">Profit</s-link>
+        <s-link href="/app/meta">Meta ads</s-link>
         <s-link href="/app/costs">Costs</s-link>
         <s-link href="/app/sync">Orders sync</s-link>
       </s-app-nav>

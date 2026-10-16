@@ -3,12 +3,14 @@ import { buildReport, shiftDay } from "../lib/profit.ts";
 import type { ProfitOrder, Report } from "../lib/profit.ts";
 import type { View } from "../lib/types.ts";
 import { loadCostRows, loadExpenseRows } from "./costs.server";
+import { getAdSpendByDay } from "./meta.server";
 import { getSettings } from "./orderSync.server";
 
 export interface ProfitResult {
   report: Report;
   feeOut: number;
   feeReturn: number;
+  fxUsdTnd: number;
   fromKey: string;
   toKey: string;
 }
@@ -47,11 +49,13 @@ export async function getProfitReport(shop: string, fromKey: string, toKey: stri
     lines: o.lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })),
   }));
 
+  const adSpend = await getAdSpendByDay(shop, fromKey, toKey, settings.fx_usd_tnd);
   const fees = { feeOut: settings.fee_out, feeReturn: settings.fee_return };
   return {
-    report: buildReport(profitOrders, costs, fees, expenses, fromKey, toKey, view),
+    report: buildReport(profitOrders, costs, fees, expenses, fromKey, toKey, view, undefined, adSpend),
     feeOut: fees.feeOut,
     feeReturn: fees.feeReturn,
+    fxUsdTnd: settings.fx_usd_tnd,
     fromKey,
     toKey,
   };

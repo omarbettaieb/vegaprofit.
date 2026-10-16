@@ -107,6 +107,15 @@ export async function saveFees(shop: string, feeOut: number, feeReturn: number) 
   }
 }
 
+export async function saveFxRate(shop: string, rate: number) {
+  await ensureShop(shop);
+  await db.setting.upsert({
+    where: { shop_key: { shop, key: "fx_usd_tnd" } },
+    create: { shop, key: "fx_usd_tnd", value: rate },
+    update: { value: rate },
+  });
+}
+
 export async function addExpense(
   shop: string,
   e: { label: string; amount: number; recurrence: "one_off" | "monthly" | "weekly"; startDate: Date; endDate: Date | null },
@@ -135,6 +144,7 @@ export async function getCostsPage(shop: string) {
     variants,
     feeOut: settings.fee_out,
     feeReturn: settings.fee_return,
+    fxUsdTnd: settings.fx_usd_tnd,
     expenses: expenses.map((e) => ({
       id: e.id,
       label: e.label,

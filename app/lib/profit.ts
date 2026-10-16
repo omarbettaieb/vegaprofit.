@@ -166,7 +166,9 @@ export interface DayRow {
   cogs: number;
   delivery: number;
   expenses: number;
-  profit: number;
+  profit: number; // before ads
+  adSpend: number;
+  profitAfterAds: number;
 }
 
 export interface Report {
@@ -179,7 +181,9 @@ export interface Report {
     delivery: number;
     returnsLoss: number;
     expenses: number;
-    profit: number;
+    profit: number; // before ads
+    adSpend: number;
+    profitAfterAds: number;
     marginPct: number | null; // profit / revenue, null when no revenue
     avgOrderValue: number | null;
     returnedParcels: number;
@@ -196,11 +200,12 @@ export function buildReport(
   toKey: string,
   view: View,
   timeZone: string = SHOP_TIMEZONE,
+  adSpendByDay: Record<string, number> = {},
 ): Report {
   const keys = daysBetween(fromKey, toKey);
   const byDay = new Map<string, DayRow>();
   for (const k of keys) {
-    byDay.set(k, { date: k, orders: 0, revenue: 0, cogs: 0, delivery: 0, expenses: 0, profit: 0 });
+    byDay.set(k, { date: k, orders: 0, revenue: 0, cogs: 0, delivery: 0, expenses: 0, profit: 0, adSpend: 0, profitAfterAds: 0 });
   }
 
   let returnsLoss = 0;
@@ -226,6 +231,8 @@ export function buildReport(
     for (const e of expenses) exp += expenseOnDay(e, row.date, timeZone);
     row.expenses = exp;
     row.profit -= exp;
+    row.adSpend = adSpendByDay[row.date] ?? 0;
+    row.profitAfterAds = row.profit - row.adSpend;
   }
 
   const days = keys.map((k) => byDay.get(k)!);
@@ -245,6 +252,8 @@ export function buildReport(
       returnsLoss,
       expenses: sum((d) => d.expenses),
       profit,
+      adSpend: sum((d) => d.adSpend),
+      profitAfterAds: sum((d) => d.profitAfterAds),
       marginPct: revenue > 0 ? (profit / revenue) * 100 : null,
       avgOrderValue: orderCount > 0 ? revenue / orderCount : null,
       returnedParcels,

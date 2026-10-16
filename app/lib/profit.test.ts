@@ -145,3 +145,11 @@ test("shiftDay and firstOfMonth", () => {
   assert.equal(shiftDay("2026-03-01", -1), "2026-02-28");
   assert.equal(firstOfMonth("2026-10-15"), "2026-10-01");
 });
+
+test("report: ad spend per day reduces profit after ads, not profit before ads", () => {
+  const r = buildReport([], [], { feeOut: 0, feeReturn: 0 }, [], "2026-10-14", "2026-10-15", "gross", undefined, { "2026-10-14": 30 });
+  assert.equal(r.totals.adSpend, 30);
+  assert.equal(r.totals.profit, 0);
+  assert.equal(r.totals.profitAfterAds, -30);
+  assert.equal(r.days[1].adSpend, 0);
+});

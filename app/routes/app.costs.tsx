@@ -2,7 +2,7 @@ import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "re
 import { useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import { addExpense, deleteExpense, getCostsPage, saveFees, saveVariantCost } from "../services/costs.server";
+import { addExpense, deleteExpense, getCostsPage, saveFees, saveFxRate, saveVariantCost } from "../services/costs.server";
 import { formatTnd, parseAmount } from "../lib/money.ts";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -33,6 +33,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (out === null || back === null) return { ok: false, message: "Both fees must be numbers (0 is allowed)" };
     await saveFees(shop, out, back);
     return { ok: true, message: "Delivery fees saved" };
+  }
+
+  if (intent === "saveFx") {
+    const rate = parseAmount(form.get("fx"));
+    if (rate === null || rate <= 0) return { ok: false, message: "Enter the rate as a number above 0, for example 3.1" };
+    await saveFxRate(shop, rate);
+    return { ok: true, message: "Exchange rate saved" };
   }
 
   if (intent === "addExpense") {
@@ -109,6 +116,25 @@ export default function CostsPage() {
         {data.feeOut === 0 ? (
           <s-paragraph>⚠ The delivery fee is 0, so profit is overstated until you set it.</s-paragraph>
         ) : null}
+      </s-section>
+
+      <s-section heading="Meta exchange rate (TND per 1 USD)">
+        <s-paragraph>
+          Your Meta account bills in USD. This rate turns Meta spend into TND everywhere in the app. Changing it
+          re-prices all past spend at the new rate.
+        </s-paragraph>
+        <fetcher.Form method="post">
+          <input type="hidden" name="intent" value="saveFx" />
+          <label>
+            1 USD ={" "}
+            <input style={input} name="fx" defaultValue={data.fxUsdTnd ? String(data.fxUsdTnd) : ""} placeholder="e.g. 3.1" inputMode="decimal" />{" "}
+            TND
+          </label>{" "}
+          <button style={btn} type="submit">
+            Save rate
+          </button>
+        </fetcher.Form>
+        {!data.fxUsdTnd ? <s-paragraph>⚠ No rate yet, so ad spend shows as 0 until you set it.</s-paragraph> : null}
       </s-section>
 
       <s-section heading="Product costs (TND per unit)">

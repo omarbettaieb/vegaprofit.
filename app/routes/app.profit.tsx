@@ -1,4 +1,5 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { useState } from "react";
 import { Form, Link, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -41,7 +42,8 @@ const input = { padding: "6px 8px", border: "1px solid #8a8a8a", borderRadius: 6
 const btn = { padding: "6px 12px", border: "1px solid #8a8a8a", borderRadius: 6, background: "#fff", cursor: "pointer" };
 
 export default function ProfitPage() {
-  const { report, feeOut, fromKey, toKey, view, range } = useLoaderData<typeof loader>();
+  const { report, feeOut, fxUsdTnd, fromKey, toKey, view, range } = useLoaderData<typeof loader>();
+  const [rangeValue, setRangeValue] = useState(range);
   const t = report.totals;
   const rows = [...report.days].reverse();
 
@@ -49,19 +51,23 @@ export default function ProfitPage() {
     <s-page heading="Profit">
       <s-section heading="Period">
         <Form method="get" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <select style={input} name="range" defaultValue={range}>
+          <select style={input} name="range" value={rangeValue} onChange={(e) => setRangeValue(e.target.value)}>
             <option value="7">Last 7 days</option>
             <option value="30">Last 30 days</option>
             <option value="60">Last 60 days</option>
             <option value="month">This month</option>
             <option value="custom">Custom dates</option>
           </select>
-          <label>
-            From <input style={input} type="date" name="from" defaultValue={fromKey} />
-          </label>
-          <label>
-            To <input style={input} type="date" name="to" defaultValue={toKey} />
-          </label>
+          {rangeValue === "custom" ? (
+            <>
+              <label>
+                From <input style={input} type="date" name="from" defaultValue={fromKey} />
+              </label>
+              <label>
+                To <input style={input} type="date" name="to" defaultValue={toKey} />
+              </label>
+            </>
+          ) : null}
           <select style={input} name="view" defaultValue={view}>
             <option value="gross">Gross: everything not cancelled or returned</option>
             <option value="net">Net: delivered orders only</option>
@@ -76,11 +82,16 @@ export default function ProfitPage() {
         </s-paragraph>
       </s-section>
 
-      {feeOut === 0 || report.ordersMissingCost > 0 ? (
+      {feeOut === 0 || fxUsdTnd === 0 || report.ordersMissingCost > 0 ? (
         <s-section heading="To check">
           {feeOut === 0 ? (
             <s-paragraph>
               ⚠ The delivery fee is 0, so profit is overstated. <Link to="/app/costs">Set it on the Costs page</Link>.
+            </s-paragraph>
+          ) : null}
+          {fxUsdTnd === 0 ? (
+            <s-paragraph>
+              ⚠ No USD to TND rate is set, so ad spend counts as 0. <Link to="/app/costs">Set the rate on the Costs page</Link>.
             </s-paragraph>
           ) : null}
           {report.ordersMissingCost > 0 ? (
@@ -101,12 +112,13 @@ export default function ProfitPage() {
             <tr><td style={cell}>Delivery (incl. returned parcels)</td><td style={num}>{formatTnd(t.delivery)}</td></tr>
             <tr><td style={cell}>of which lost on {t.returnedParcels} returned parcel(s)</td><td style={num}>{formatTnd(t.returnsLoss)}</td></tr>
             <tr><td style={cell}>Other expenses</td><td style={num}>{formatTnd(t.expenses)}</td></tr>
-            <tr><td style={cell}><strong>Profit before ads</strong></td><td style={num}><strong>{formatTnd(t.profit)}</strong></td></tr>
+            <tr><td style={cell}>Profit before ads</td><td style={num}>{formatTnd(t.profit)}</td></tr>
+            <tr><td style={cell}>Ad spend (Meta)</td><td style={num}>{formatTnd(t.adSpend)}</td></tr>
+            <tr><td style={cell}><strong>Profit after ads</strong></td><td style={num}><strong>{formatTnd(t.profitAfterAds)}</strong></td></tr>
             <tr><td style={cell}>Margin</td><td style={num}>{t.marginPct === null ? "-" : `${t.marginPct.toFixed(1)}%`}</td></tr>
             <tr><td style={cell}>Average order value</td><td style={num}>{t.avgOrderValue === null ? "-" : formatTnd(t.avgOrderValue)}</td></tr>
           </tbody>
         </table>
-        <s-paragraph>Ad spend is added in the next milestone, so this is profit before advertising.</s-paragraph>
       </s-section>
 
       <s-section heading="Day by day (TND)">
@@ -119,7 +131,9 @@ export default function ProfitPage() {
               <th style={num}>Product cost</th>
               <th style={num}>Delivery</th>
               <th style={num}>Expenses</th>
-              <th style={num}>Profit</th>
+              <th style={num}>Before ads</th>
+              <th style={num}>Ad spend</th>
+              <th style={num}>After ads</th>
             </tr>
           </thead>
           <tbody>
@@ -132,6 +146,8 @@ export default function ProfitPage() {
                 <td style={num}>{formatTnd(d.delivery)}</td>
                 <td style={num}>{formatTnd(d.expenses)}</td>
                 <td style={num}>{formatTnd(d.profit)}</td>
+                <td style={num}>{formatTnd(d.adSpend)}</td>
+                <td style={num}>{formatTnd(d.profitAfterAds)}</td>
               </tr>
             ))}
           </tbody>

@@ -3,7 +3,7 @@
 
 export const SETTING_DEFAULTS = {
   stale_days: 7, // fulfilled but still PENDING after N days => "stale order" alert
-  final_after_days: 14, // an order is treated as final only N days after creation
+  final_after_days: 30, // an order is treated as final only N days after creation
   duplicate_window_hours: 72, // same phone within N hours => possible duplicate
   recheck_interval_hours: 12, // catch-up sync runs when the last one is older than this
   recheck_days: 60, // catch-up looks back this many days
@@ -12,6 +12,8 @@ export const SETTING_DEFAULTS = {
   fake_cancel_window_hours: 72, // ...and cancelled within N hours => "likely fake"
   fee_out: 0, // courier fee in TND for every shipped parcel (set on the Costs page)
   fee_return: 0, // extra courier fee in TND when a parcel comes back
+  fx_usd_tnd: 0, // TND per 1 USD for Meta spend (set on the Costs page; 0 = not set yet)
+  meta_sync_interval_hours: 6, // Meta spend is re-synced on app open when older than this
 } as const;
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;
