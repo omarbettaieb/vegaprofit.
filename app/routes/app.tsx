@@ -29,6 +29,7 @@ export default function App() {
         <s-link href="/app">Home</s-link>
         <s-link href="/app/profit">Profit</s-link>
         <s-link href="/app/meta">Meta ads</s-link>
+        <s-link href="/app/reconcile">Real revenue</s-link>
         <s-link href="/app/decisions">Decisions</s-link>
         <s-link href="/app/calendar">Calendar</s-link>
         <s-link href="/app/costs">Costs</s-link>
