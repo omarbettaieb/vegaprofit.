@@ -1,8 +1,13 @@
 import { Prisma } from "@prisma/client";
 import db from "../db.server";
-import { cpa, parseInsightRow } from "../lib/meta.ts";
-import type { GraphInsightRow, InsightRow, MetaLine } from "../lib/meta.ts";
-import { dayKey, shiftDay } from "../lib/profit.ts";
+import { parseInsightRow } from "../lib/meta.ts";
+import type { GraphInsightRow, InsightRow } from "../lib/meta.ts";
+import { computeTruth, dayChecks, DEFAULT_LIMITS } from "../lib/truth.ts";
+import type { DayCheck, Truth } from "../lib/truth.ts";
+import { dayKey, orderProfit, shiftDay } from "../lib/profit.ts";
+import type { ProfitOrder } from "../lib/profit.ts";
+import type { Lifecycle } from "../lib/types.ts";
+import { loadCostRows } from "./costs.server";
 import { getSettings } from "./orderSync.server";
 
 const WINDOW = "7d_click,1d_view";
@@ -184,15 +189,41 @@ export async function getAdSpendByDay(shop: string, fromKey: string, toKey: stri
 
 export type MetaLevelName = "campaign" | "adset" | "ad";
 
-// Spend, Meta-reported purchases and Shopify orders per campaign / ad set / ad for a day range.
-// "True orders" = Shopify orders attributed to the entity that are not cancelled, returned or refunded.
-export async function getMetaLines(shop: string, level: MetaLevelName, fromKey: string, toKey: string): Promise<{ lines: MetaLine[]; rate: number; unattributedOrders: number }> {
+export interface TruthLine extends Truth {
+  key: string;
+  name: string;
+  parent?: string;
+  spendTnd: number;
+  metaPurchases: number;
+  clicks: number;
+  impressions: number;
+  trueOrders: number;
+  reversedOrders: number;
+  excludedOrders: number;
+  revenueTnd: number;
+  contributionTnd: number;
+}
+
+const REVERSED: Lifecycle[] = ["CANCELLED", "RETURNED", "REFUNDED"];
+
+// Spend, Meta-reported purchases and what Shopify can prove, per campaign / ad set / ad for a day range.
+export async function getMetaLines(
+  shop: string,
+  level: MetaLevelName,
+  fromKey: string,
+  toKey: string,
+): Promise<{ lines: TruthLine[]; rate: number; unattributedOrders: number; ordersMissingCost: number }> {
   const settings = await getSettings(shop);
   const rate = settings.fx_usd_tnd;
   const from = new Date(`${fromKey}T00:00:00Z`);
   const to = new Date(`${toKey}T00:00:00Z`);
+  const limits = {
+    amberRatio: settings.tracking_amber_ratio,
+    redRatio: settings.tracking_red_ratio,
+    minPurchases: DEFAULT_LIMITS.minPurchases,
+  };
 
-  const [insights, ads, adSets, campaigns, orders] = await Promise.all([
+  const [insights, ads, adSets, campaigns, orders, costs] = await Promise.all([
     db.metaInsightsDaily.findMany({ where: { shop, level: "AD", attributionWindow: WINDOW, date: { gte: from, lte: to } } }),
     db.metaAd.findMany({ where: { shop }, select: { metaId: true, name: true, adSet: { select: { metaId: true } } } }),
     db.metaAdSet.findMany({ where: { shop }, select: { metaId: true, name: true, campaign: { select: { metaId: true } } } }),
@@ -200,11 +231,21 @@ export async function getMetaLines(shop: string, level: MetaLevelName, fromKey: 
     db.order.findMany({
       where: {
         shop,
-        excluded: false,
         createdAtShopify: { gte: new Date(`${shiftDay(fromKey, -1)}T00:00:00Z`), lt: new Date(`${shiftDay(toKey, 2)}T00:00:00Z`) },
       },
-      select: { createdAtShopify: true, lifecycle: true, totalPrice: true, totalRefunded: true, attribution: { select: { campaignId: true, adSetId: true, adId: true } } },
+      select: {
+        id: true,
+        name: true,
+        excluded: true,
+        createdAtShopify: true,
+        lifecycle: true,
+        totalPrice: true,
+        totalRefunded: true,
+        lines: { select: { variantId: true, quantity: true } },
+        attribution: { select: { campaignId: true, adSetId: true, adId: true } },
+      },
     }),
+    loadCostRows(shop),
   ]);
 
   const adSetOfAd = new Map(ads.map((a) => [a.metaId, a.adSet.metaId]));
@@ -228,10 +269,14 @@ export async function getMetaLines(shop: string, level: MetaLevelName, fromKey: 
     return level === "adset" ? setId : campaignOfAdSet.get(setId);
   };
 
-  const acc = new Map<string, { spend: number; purchases: number; clicks: number; impressions: number; orders: number; revenue: number }>();
+  interface Acc {
+    spend: number; purchases: number; clicks: number; impressions: number;
+    trueOrders: number; reversed: number; excluded: number; revenue: number; contribution: number;
+  }
+  const acc = new Map<string, Acc>();
   const slot = (k: string) => {
     let v = acc.get(k);
-    if (!v) acc.set(k, (v = { spend: 0, purchases: 0, clicks: 0, impressions: 0, orders: 0, revenue: 0 }));
+    if (!v) acc.set(k, (v = { spend: 0, purchases: 0, clicks: 0, impressions: 0, trueOrders: 0, reversed: 0, excluded: 0, revenue: 0, contribution: 0 }));
     return v;
   };
   for (const r of insights) {
@@ -244,23 +289,42 @@ export async function getMetaLines(shop: string, level: MetaLevelName, fromKey: 
     v.impressions += r.impressions;
   }
 
+  const fees = { feeOut: settings.fee_out, feeReturn: settings.fee_return };
   let unattributed = 0;
+  let missingCost = 0;
   for (const o of orders) {
     const day = dayKey(o.createdAtShopify);
     if (day < fromKey || day > toKey) continue;
-    if (o.lifecycle === "CANCELLED" || o.lifecycle === "RETURNED" || o.lifecycle === "REFUNDED") continue;
     const a = o.attribution;
     const k = level === "campaign" ? a?.campaignId : level === "adset" ? a?.adSetId : a?.adId;
     if (!k) {
-      unattributed += 1;
+      if (!o.excluded && !REVERSED.includes(o.lifecycle as Lifecycle)) unattributed += 1;
       continue;
     }
     const v = slot(k);
-    v.orders += 1;
-    v.revenue += Number(o.totalPrice) - Number(o.totalRefunded);
+    if (o.excluded) {
+      v.excluded += 1;
+      continue;
+    }
+    if (REVERSED.includes(o.lifecycle as Lifecycle)) v.reversed += 1;
+    else v.trueOrders += 1;
+
+    const po: ProfitOrder = {
+      id: o.id,
+      name: o.name,
+      createdAt: o.createdAtShopify,
+      lifecycle: o.lifecycle as Lifecycle,
+      totalPrice: Number(o.totalPrice),
+      totalRefunded: Number(o.totalRefunded),
+      lines: o.lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })),
+    };
+    const p = orderProfit(po, costs, fees, "gross");
+    v.contribution += p.profit;
+    if (p.counted) v.revenue += p.revenue;
+    if (p.missingCost) missingCost += 1;
   }
 
-  const lines: MetaLine[] = [...acc.entries()].map(([key, v]) => ({
+  const lines: TruthLine[] = [...acc.entries()].map(([key, v]) => ({
     key,
     name: names.get(key) ?? key,
     parent: level === "campaign" ? undefined : parentName.get(key),
@@ -268,11 +332,43 @@ export async function getMetaLines(shop: string, level: MetaLevelName, fromKey: 
     metaPurchases: v.purchases,
     clicks: v.clicks,
     impressions: v.impressions,
-    trueOrders: v.orders,
+    trueOrders: v.trueOrders,
+    reversedOrders: v.reversed,
+    excludedOrders: v.excluded,
     revenueTnd: v.revenue,
-    cpaTnd: cpa(v.spend, v.orders),
-    metaCpaTnd: cpa(v.spend, v.purchases),
+    contributionTnd: v.contribution,
+    ...computeTruth(
+      { metaPurchases: v.purchases, trueOrders: v.trueOrders, reversedOrders: v.reversed, excludedOrders: v.excluded, spend: v.spend, revenue: v.revenue, contribution: v.contribution },
+      limits,
+    ),
   }));
   lines.sort((a, b) => b.spendTnd - a.spendTnd);
-  return { lines, rate, unattributedOrders: unattributed };
+  return { lines, rate, unattributedOrders: unattributed, ordersMissingCost: missingCost };
+}
+
+// Account-level duplicate check per day, from DUPLICATE_START on (Omar's rule: measured from 14 Oct 2026).
+export const DUPLICATE_START = "2026-10-14";
+
+export async function getDailyChecks(shop: string, toKey: string): Promise<DayCheck[]> {
+  const fromKey = DUPLICATE_START;
+  if (toKey < fromKey) return [];
+  const [insights, orders] = await Promise.all([
+    db.metaInsightsDaily.groupBy({
+      by: ["date"],
+      where: { shop, level: "AD", attributionWindow: WINDOW, date: { gte: new Date(`${fromKey}T00:00:00Z`), lte: new Date(`${toKey}T00:00:00Z`) } },
+      _sum: { metaPurchases: true },
+    }),
+    db.order.findMany({
+      where: { shop, createdAtShopify: { gte: new Date(`${shiftDay(fromKey, -1)}T00:00:00Z`), lt: new Date(`${shiftDay(toKey, 2)}T00:00:00Z`) } },
+      select: { createdAtShopify: true },
+    }),
+  ]);
+  const meta: Record<string, number> = {};
+  for (const r of insights) meta[r.date.toISOString().slice(0, 10)] = r._sum.metaPurchases ?? 0;
+  const shopify: Record<string, number> = {};
+  for (const o of orders) {
+    const d = dayKey(o.createdAtShopify);
+    shopify[d] = (shopify[d] ?? 0) + 1;
+  }
+  return dayChecks(meta, shopify, fromKey, toKey);
 }

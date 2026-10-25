@@ -91,7 +91,7 @@ export function reversalLag(orders: RecOrder[]): Lag {
 }
 
 // Orders that left the shop (or were placed) but never reached DELIVERED or a reversal within `staleDays`.
-export function staleOrders(orders: RecOrder[], now: Date, staleDays: number): (RecOrder & { ageDays: number })[] {
+export function staleOrders<T extends RecOrder>(orders: T[], now: Date, staleDays: number): (T & { ageDays: number })[] {
   return orders
     .filter((o) => !o.excluded && (o.lifecycle === "PLACED" || o.lifecycle === "IN_TRANSIT"))
     .map((o) => ({ ...o, ageDays: Math.floor((now.getTime() - o.createdAt.getTime()) / 86_400_000) }))

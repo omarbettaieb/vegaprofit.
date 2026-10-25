@@ -4,6 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { addCalendarEvent, deleteCalendarEvent, entityChoices, listCalendar, seedCalendarOnce, setCalendarDone } from "../services/decisions.server";
 import { dayKey, shiftDay } from "../lib/profit.ts";
+import { Page, Section } from "../ui/kit.tsx";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const KINDS: Record<string, string> = {
@@ -75,9 +76,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return { ok: false, message: "Unknown action" };
 };
 
-const cell = { padding: "6px 10px", textAlign: "left" as const, borderBottom: "1px solid #e1e3e5", verticalAlign: "top" as const };
-const input = { padding: "6px 8px", border: "1px solid #8a8a8a", borderRadius: 6 };
-const btn = { padding: "4px 10px", border: "1px solid #8a8a8a", borderRadius: 6, background: "#fff", cursor: "pointer" };
+const cell = { textAlign: "left" as const };
+const input = {};
+const btn = {};
 const KIND_COLOR: Record<string, string> = { review: "#175cd3", campaign_end: "#b42318", seasonal_window: "#7a2eb8", auto_review: "#667085" };
 
 export default function CalendarPage() {
@@ -120,17 +121,17 @@ export default function CalendarPage() {
   const nextMonth = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 7);
 
   return (
-    <s-page heading="Calendar">
+    <Page title="Calendar">
       {result ? (
-        <s-section>
-          <s-paragraph>
+        <Section>
+          <p className="vp-p">
             <strong>{result.ok ? "✓ " : "⚠ "}</strong>
             {result.message}
-          </s-paragraph>
-        </s-section>
+          </p>
+        </Section>
       ) : null}
 
-      <s-section heading="View">
+      <Section title="View">
         <Form method="get" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <select style={input} name="view" defaultValue={view}>
             <option value="day">Next 14 days, day by day</option>
@@ -142,11 +143,11 @@ export default function CalendarPage() {
           <label>To <input style={input} type="date" name="to" defaultValue={to} /></label>
           <button style={btn} type="submit">Show</button>
         </Form>
-        <s-paragraph>Showing {from} to {to}. Review dates you set make the Decisions page hold its verdict until that day.</s-paragraph>
-      </s-section>
+        <p className="vp-p">Showing {from} to {to}. Review dates you set make the Decisions page hold its verdict until that day.</p>
+      </Section>
 
       {view === "month" ? (
-        <s-section heading={ym}>
+        <Section title={ym}>
           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
             <a href={`?view=month&month=${prevMonth}`}>← {prevMonth}</a>
             <a href={`?view=month&month=${nextMonth}`}>{nextMonth} →</a>
@@ -160,7 +161,7 @@ export default function CalendarPage() {
                 {Array.from({ length: cells.length / 7 }, (_, w) => (
                   <tr key={w}>
                     {cells.slice(w * 7, w * 7 + 7).map((d, i) => (
-                      <td key={i} style={{ ...cell, height: 80, background: d === today ? "#eef4ff" : undefined }}>
+                      <td key={i} style={{ ...cell, height: 80, border: "1px solid var(--line2)", padding: 6, background: d === today ? "var(--teal-soft)" : undefined }}>
                         {d ? (
                           <>
                             <div style={{ fontWeight: 600 }}>{Number(d.slice(8))}</div>
@@ -176,10 +177,10 @@ export default function CalendarPage() {
               </tbody>
             </table>
           </div>
-        </s-section>
+        </Section>
       ) : (
-        <s-section heading="Day by day">
-          {items.length === 0 ? <s-paragraph>Nothing planned in this period.</s-paragraph> : null}
+        <Section title="Day by day">
+          {items.length === 0 ? <p className="vp-p">Nothing planned in this period.</p> : null}
           <table style={{ borderCollapse: "collapse", width: "100%" }}>
             <tbody>
               {[...byDay.entries()].map(([d, list]) => (
@@ -190,10 +191,10 @@ export default function CalendarPage() {
               ))}
             </tbody>
           </table>
-        </s-section>
+        </Section>
       )}
 
-      <s-section heading="Add a date">
+      <Section title="Add a date">
         <fetcher.Form method="post" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <input type="hidden" name="intent" value="addEvent" />
           <select style={input} name="kind" defaultValue="review">
@@ -213,12 +214,12 @@ export default function CalendarPage() {
           <input style={{ ...input, width: 200 }} name="note" placeholder="Note (optional)" />
           <button style={btn} type="submit">Add</button>
         </fetcher.Form>
-        <s-paragraph>
+        <p className="vp-p">
           For a seasonal window, "Date" is the last day and "Window starts" the first. While a window is active, entities it
           covers show CALENDAR instead of a decision.
-        </s-paragraph>
-      </s-section>
-    </s-page>
+        </p>
+      </Section>
+    </Page>
   );
 }
 

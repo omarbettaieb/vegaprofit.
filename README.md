@@ -61,3 +61,10 @@ Each milestone stops for your "go".
 
 ## Tests
 See section 2b.
+
+## UI and public demo (M9)
+
+Design system: `app/ui/theme.ts` (one stylesheet) and `app/ui/kit.tsx` (shell, KPI strip, claimed-vs-proven bars, SVG charts).
+Pages are presentational views in `app/views/`, used by both the real routes (`/app/...`) and the public demo (`/demo/...`).
+The demo needs no login and no database: `app/lib/demoData.ts` generates a fictional store and runs it through the real engines.
+Opening the site root without `?shop=` redirects to `/demo`.

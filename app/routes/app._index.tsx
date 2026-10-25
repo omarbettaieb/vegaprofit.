@@ -1,34 +1,30 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
+import { getDecisions } from "../services/decisions.server";
+import { getDailyChecks, getMetaLines, getMetaStatus } from "../services/meta.server";
+import { getProfitReport } from "../services/profit.server";
+import { dayKey, shiftDay } from "../lib/profit.ts";
+import HomeView from "../views/HomeView";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
-  return null;
+  const { session } = await authenticate.admin(request);
+  const today = dayKey(new Date());
+  const from = shiftDay(today, -29);
+  const [meta, decisions, profit, status, checks] = await Promise.all([
+    getMetaLines(session.shop, "campaign", from, today),
+    getDecisions(session.shop, "campaign"),
+    getProfitReport(session.shop, from, today, "gross"),
+    getMetaStatus(session.shop),
+    getDailyChecks(session.shop, today),
+  ]);
+  return { lines: meta.lines, decisions: decisions.lines, report: profit.report, periodDays: 30, metaConfigured: status.configured, checks };
 };
 
 export default function Home() {
-  return (
-    <s-page heading="VegaProfit">
-      <s-section heading="What this app does">
-        <s-paragraph>
-          VegaProfit shows what your store really earns. It tracks every order through placed, in transit, delivered,
-          cancelled, returned and refunded, adds your product costs, delivery fees, expenses and Meta ad spend, and checks
-          Meta's numbers against your real Shopify orders.
-        </s-paragraph>
-        <s-paragraph>
-          <s-link href="/app/profit">Profit</s-link> · <s-link href="/app/reconcile">Real revenue</s-link> ·{" "}
-          <s-link href="/app/meta">Meta ads</s-link> · <s-link href="/app/decisions">Decisions</s-link> ·{" "}
-          <s-link href="/app/calendar">Calendar</s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-link href="/app/costs">Costs</s-link> · <s-link href="/app/export">Export</s-link> ·{" "}
-          <s-link href="/app/health">Health check</s-link> · <s-link href="/app/sync">Orders sync</s-link>
-        </s-paragraph>
-        <s-paragraph>Start with the Health check when something looks wrong: it tells you what to fix.</s-paragraph>
-      </s-section>
-    </s-page>
-  );
+  const data = useLoaderData<typeof loader>();
+  return <HomeView base="/app" {...data} />;
 }
 
 export const headers: HeadersFunction = (headersArgs) => boundary.headers(headersArgs);

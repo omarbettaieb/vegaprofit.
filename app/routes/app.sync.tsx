@@ -6,6 +6,7 @@ import { authenticate } from "../shopify.server";
 import { getSyncStatus, setExcluded, startSync } from "../services/orderSync.server";
 import { getOverview } from "../services/syncOverview.server";
 import type { ReviewRow } from "../services/syncOverview.server";
+import { Page, Section } from "../ui/kit.tsx";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -42,7 +43,7 @@ const LABELS: Record<string, string> = {
   PARTIALLY_REFUNDED: "Partially refunded",
 };
 
-const cell = { padding: "6px 10px", textAlign: "left" as const, borderBottom: "1px solid #e1e3e5" };
+const cell = { textAlign: "left" as const };
 
 function ReviewTable({
   rows,
@@ -55,7 +56,7 @@ function ReviewTable({
   intent: "exclude" | "restore";
   onAct: (intent: string, orderId: string) => void;
 }) {
-  if (rows.length === 0) return <s-paragraph>Nothing to review.</s-paragraph>;
+  if (rows.length === 0) return <p className="vp-p">Nothing to review.</p>;
   return (
     <table style={{ borderCollapse: "collapse", width: "100%" }}>
       <thead>
@@ -79,7 +80,7 @@ function ReviewTable({
             <td style={cell}>{LABELS[r.lifecycle] ?? r.lifecycle}</td>
             <td style={cell}>{r.note}</td>
             <td style={cell}>
-              <s-button onClick={() => onAct(intent, r.id)}>{actionLabel}</s-button>
+              <button type="button" onClick={() => onAct(intent, r.id)}>{actionLabel}</button>
             </td>
           </tr>
         ))}
@@ -105,35 +106,35 @@ export default function SyncPage() {
     fetcher.submit(orderId ? { intent, orderId } : { intent }, { method: "post" });
 
   return (
-    <s-page heading="Orders sync">
-      <s-section heading="Sync with Shopify">
-        <s-paragraph>
+    <Page title="Orders sync">
+      <Section title="Sync with Shopify">
+        <p className="vp-p">
           Last status:{" "}
           <strong>
             {running ? "running" : status.state === "error" ? "error" : status.finishedAt ? "done" : "not run yet"}
           </strong>
           {status.mode ? ` (${status.mode === "full" ? "full import" : "re-check"})` : ""}. Started{" "}
           {fmt(status.startedAt)}, finished {fmt(status.finishedAt)}.
-        </s-paragraph>
-        <s-paragraph>
+        </p>
+        <p className="vp-p">
           Orders processed: {status.processed} ({status.created} new, {status.changed} changed status).
-        </s-paragraph>
-        {status.error ? <s-paragraph>Error: {status.error}</s-paragraph> : null}
-        <s-stack direction="inline" gap="base">
-          <s-button disabled={running} onClick={() => act("import")}>
+        </p>
+        {status.error ? <p className="vp-p">Error: {status.error}</p> : null}
+        <div className="vp-bar-tools">
+          <button type="button" className="vp-primary" disabled={running} onClick={() => act("import")}>
             Import all orders
-          </s-button>
-          <s-button disabled={running} onClick={() => act("recheck")}>
+          </button>
+          <button type="button" className="vp-primary" disabled={running} onClick={() => act("recheck")}>
             Re-check last 60 days
-          </s-button>
-        </s-stack>
-        <s-paragraph>
+          </button>
+        </div>
+        <p className="vp-p">
           Re-check runs by itself when you open the app and the last check is older than 12 hours, so new orders,
           late cancellations and returns are picked up. You can also click the button above at any time.
-        </s-paragraph>
-      </s-section>
+        </p>
+      </Section>
 
-      <s-section heading="Orders by status">
+      <Section title="Orders by status">
         <table style={{ borderCollapse: "collapse" }}>
           <tbody>
             {overview.byLifecycle.map((r) => (
@@ -149,34 +150,34 @@ export default function SyncPage() {
             ) : null}
           </tbody>
         </table>
-        <s-paragraph>Excluded orders are not counted here. Median order total (90 days): {overview.medianTicket}.</s-paragraph>
-      </s-section>
+        <p className="vp-p">Excluded orders are not counted here. Median order total (90 days): {overview.medianTicket}.</p>
+      </Section>
 
-      <s-section heading="Alerts">
-        <s-paragraph>
+      <Section title="Alerts">
+        <p className="vp-p">
           {overview.staleCount} order(s) shipped more than {overview.staleDays} days ago and still not marked paid: update
           them in Shopify so revenue is correct.
-        </s-paragraph>
-        <s-paragraph>
+        </p>
+        <p className="vp-p">
           {overview.unattributed.none} of {overview.unattributed.total} orders in the last 30 days have no Meta ad
           attached (direct, organic, or missing UTMs).
-        </s-paragraph>
-      </s-section>
+        </p>
+      </Section>
 
-      <s-section heading="Review: suggested fake orders">
-        <s-paragraph>Suggestions only. Nothing is excluded unless you click.</s-paragraph>
+      <Section title="Review: suggested fake orders">
+        <p className="vp-p">Suggestions only. Nothing is excluded unless you click.</p>
         <ReviewTable rows={overview.fakeSuggestions} actionLabel="Exclude as fake" intent="exclude" onAct={act} />
-      </s-section>
+      </Section>
 
-      <s-section heading="Review: possible duplicate orders">
-        <s-paragraph>Same phone number ordering again within a short window. Flag only, never removed.</s-paragraph>
+      <Section title="Review: possible duplicate orders">
+        <p className="vp-p">Same phone number ordering again within a short window. Flag only, never removed.</p>
         <ReviewTable rows={overview.duplicates} actionLabel="Exclude as fake" intent="exclude" onAct={act} />
-      </s-section>
+      </Section>
 
-      <s-section heading="Excluded orders">
+      <Section title="Excluded orders">
         <ReviewTable rows={overview.excluded} actionLabel="Restore" intent="restore" onAct={act} />
-      </s-section>
-    </s-page>
+      </Section>
+    </Page>
   );
 }
 

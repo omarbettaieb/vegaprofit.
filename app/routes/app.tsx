@@ -6,6 +6,7 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
 import { catchUpIfDue } from "../services/orderSync.server";
 import { metaSyncIfDue } from "../services/meta.server";
+import { Shell } from "../ui/kit";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -37,7 +38,9 @@ export default function App() {
         <s-link href="/app/health">Health</s-link>
         <s-link href="/app/sync">Orders sync</s-link>
       </s-app-nav>
-      <Outlet />
+      <Shell base="/app">
+        <Outlet />
+      </Shell>
     </AppProvider>
   );
 }

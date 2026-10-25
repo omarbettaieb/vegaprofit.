@@ -4,6 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { addExpense, deleteExpense, getCostsPage, saveFees, saveFxRate, saveVariantCost } from "../services/costs.server";
 import { formatTnd, parseAmount } from "../lib/money.ts";
+import { Page, Section } from "../ui/kit.tsx";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -73,9 +74,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return { ok: false, message: "Unknown action" };
 };
 
-const cell = { padding: "6px 10px", textAlign: "left" as const, borderBottom: "1px solid #e1e3e5" };
-const input = { padding: "6px 8px", border: "1px solid #8a8a8a", borderRadius: 6, width: 110 };
-const btn = { padding: "6px 12px", border: "1px solid #8a8a8a", borderRadius: 6, background: "#fff", cursor: "pointer" };
+const cell = { textAlign: "left" as const };
+const input = {};
+const btn = {};
 const RECURRENCE: Record<string, string> = { one_off: "One time", monthly: "Every month", weekly: "Every week" };
 
 export default function CostsPage() {
@@ -84,21 +85,21 @@ export default function CostsPage() {
   const result = fetcher.data;
 
   return (
-    <s-page heading="Costs">
+    <Page title="Costs">
       {result ? (
-        <s-section>
-          <s-paragraph>
+        <Section>
+          <p className="vp-p">
             <strong>{result.ok ? "✓ " : "⚠ "}</strong>
             {result.message}
-          </s-paragraph>
-        </s-section>
+          </p>
+        </Section>
       ) : null}
 
-      <s-section heading="Delivery fees (TND)">
-        <s-paragraph>
+      <Section title="Delivery fees (TND)">
+        <p className="vp-p">
           The courier fee is charged to every parcel that leaves. A returned or refused parcel costs the outbound fee
           plus the return fee, and the product goes back to stock.
-        </s-paragraph>
+        </p>
         <fetcher.Form method="post">
           <input type="hidden" name="intent" value="saveFees" />
           <label>
@@ -114,15 +115,15 @@ export default function CostsPage() {
           </button>
         </fetcher.Form>
         {data.feeOut === 0 ? (
-          <s-paragraph>⚠ The delivery fee is 0, so profit is overstated until you set it.</s-paragraph>
+          <p className="vp-p">⚠ The delivery fee is 0, so profit is overstated until you set it.</p>
         ) : null}
-      </s-section>
+      </Section>
 
-      <s-section heading="Meta exchange rate (TND per 1 USD)">
-        <s-paragraph>
+      <Section title="Meta exchange rate (TND per 1 USD)">
+        <p className="vp-p">
           Your Meta account bills in USD. This rate turns Meta spend into TND everywhere in the app. Changing it
           re-prices all past spend at the new rate.
-        </s-paragraph>
+        </p>
         <fetcher.Form method="post">
           <input type="hidden" name="intent" value="saveFx" />
           <label>
@@ -134,16 +135,16 @@ export default function CostsPage() {
             Save rate
           </button>
         </fetcher.Form>
-        {!data.fxUsdTnd ? <s-paragraph>⚠ No rate yet, so ad spend shows as 0 until you set it.</s-paragraph> : null}
-      </s-section>
+        {!data.fxUsdTnd ? <p className="vp-p">⚠ No rate yet, so ad spend shows as 0 until you set it.</p> : null}
+      </Section>
 
-      <s-section heading="Product costs (TND per unit)">
-        <s-paragraph>
+      <Section title="Product costs (TND per unit)">
+        <p className="vp-p">
           What each unit costs you to buy. {data.missingCount} of {data.variants.length} products have no cost yet; their
           orders show profit without product cost. A later change applies from today, so past orders keep the old cost.
-        </s-paragraph>
+        </p>
         {data.variants.length === 0 ? (
-          <s-paragraph>No products yet. Import your orders first.</s-paragraph>
+          <p className="vp-p">No products yet. Import your orders first.</p>
         ) : (
           <table style={{ borderCollapse: "collapse", width: "100%" }}>
             <thead>
@@ -189,13 +190,13 @@ export default function CostsPage() {
             </tbody>
           </table>
         )}
-      </s-section>
+      </Section>
 
-      <s-section heading="Other expenses (TND)">
-        <s-paragraph>
+      <Section title="Other expenses (TND)">
+        <p className="vp-p">
           Rent, salaries, apps, packaging, anything that is not product cost, delivery or ad spend. Monthly amounts are
           spread evenly over the days of the month.
-        </s-paragraph>
+        </p>
         {data.expenses.length > 0 ? (
           <table style={{ borderCollapse: "collapse", width: "100%" }}>
             <thead>
@@ -230,7 +231,7 @@ export default function CostsPage() {
             </tbody>
           </table>
         ) : (
-          <s-paragraph>No expenses yet.</s-paragraph>
+          <p className="vp-p">No expenses yet.</p>
         )}
         <fetcher.Form method="post" style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input type="hidden" name="intent" value="addExpense" />
@@ -251,8 +252,8 @@ export default function CostsPage() {
             Add expense
           </button>
         </fetcher.Form>
-      </s-section>
-    </s-page>
+      </Section>
+    </Page>
   );
 }
 

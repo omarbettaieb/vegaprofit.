@@ -9,6 +9,7 @@ import { getMetaLines } from "../services/meta.server";
 import { dayKey, firstOfMonth, shiftDay } from "../lib/profit.ts";
 import { toCsv } from "../lib/csv.ts";
 import type { View } from "../lib/types.ts";
+import { Page, Section } from "../ui/kit.tsx";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -88,8 +89,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return { files, range, view, fromKey, toKey };
 };
 
-const input = { padding: "6px 8px", border: "1px solid #8a8a8a", borderRadius: 6 };
-const btn = { padding: "6px 12px", border: "1px solid #8a8a8a", borderRadius: 6, background: "#fff", cursor: "pointer" };
+const input = {};
+const btn = {};
 
 function download(name: string, text: string) {
   try {
@@ -113,8 +114,8 @@ export default function ExportPage() {
   const open = files.find((f) => f.file === shown);
 
   return (
-    <s-page heading="Export">
-      <s-section heading="Period">
+    <Page title="Export">
+      <Section title="Period">
         <Form method="get" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <select style={input} name="range" value={rangeValue} onChange={(e) => setRangeValue(e.target.value)}>
             <option value="7">Last 7 days</option>
@@ -135,10 +136,10 @@ export default function ExportPage() {
           </select>
           <button style={btn} type="submit">Show</button>
         </Form>
-        <s-paragraph>Files for {fromKey} to {toKey}. They open in Excel or Google Sheets. No customer names, phones or addresses are included.</s-paragraph>
-      </s-section>
+        <p className="vp-p">Files for {fromKey} to {toKey}. They open in Excel or Google Sheets. No customer names, phones or addresses are included.</p>
+      </Section>
 
-      <s-section heading="Files">
+      <Section title="Files">
         <table style={{ borderCollapse: "collapse" }}>
           <tbody>
             {files.map((f) => (
@@ -156,12 +157,12 @@ export default function ExportPage() {
         </table>
         {open ? (
           <div>
-            <s-paragraph>If the download is blocked, select all in the box, copy, and paste into a spreadsheet.</s-paragraph>
+            <p className="vp-p">If the download is blocked, select all in the box, copy, and paste into a spreadsheet.</p>
             <textarea readOnly value={open.csv} style={{ width: "100%", height: 220, fontFamily: "monospace", fontSize: 12 }} onFocus={(e) => e.currentTarget.select()} />
           </div>
         ) : null}
-      </s-section>
-    </s-page>
+      </Section>
+    </Page>
   );
 }
 
