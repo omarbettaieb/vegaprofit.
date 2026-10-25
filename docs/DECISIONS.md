@@ -107,3 +107,22 @@ Omar stopped using EasySell and uses Meta Conversions API (sender not yet identi
 2. **Webhooks and older order history** depend on Shopify access (see corrections above).
 3. Ad account currency and FX (M4).
 4. `shopify.app.toml` has the Render URL; keep it.
+
+## Milestones 4 to 8 (16 to 25 Oct 2026)
+- **Meta data source:** the app reads the Marketing API directly with a system-user token (`ads_read`), not through Windsor or the Ads MCP, because the live app cannot use those connections. It pulls 60 days at ad level, one row per ad per day, replaces that window on each sync, and rolls up to ad set and campaign. Purchases use one action type only (`purchase`, else `omni_purchase`, else pixel purchase), never the sum. Attribution window 7d_click, 1d_view.
+- **Currency:** the ad account bills in USD. One typed rate (TND per USD) converts all spend and Meta revenue at read time, so changing it re-prices history.
+- **True orders** = Shopify orders tied to the entity (last-touch UTM ids) that are not cancelled, returned, refunded or marked fake. **Unexplained** = Meta purchases minus all Shopify orders behind the entity (duplicates, view-only credit, or orders with no tracking data).
+- **Tracking light:** Meta / Shopify orders above 1.25 = orange, above 1.75 = red, fewer than 4 purchases = too few to say. Editable.
+- **Duplicate proof (from 14 Oct 2026):** per day, Meta cannot have more purchases than orders exist; any excess is a proven duplicate.
+- **Break-even cost** per entity = average profit before ads per true order (revenue - product cost - delivery, minus the loss on its returned parcels). Break-even ROAS = revenue / that profit. An entity with no orders is judged against the account average.
+- **Verdict precedence:** learning window (days 1-3) > no break-even yet > KILL > early PAUSE (spend > 3x and cost > 2x) or tracking red > CALENDAR (seasonal window, campaign ending within 3 days, review date you set) > PAUSE (>= 10 orders, 1.2-1.5x) > SCALE (>= 10 orders, <= 0.8x, tracking not red, reversal rate not rising 15 points; +20% at most once per 48 h) > WATCH. All numbers editable on the Decisions page. The app only advises; it never edits ads.
+- **Calendar:** seeded once with Octobre Rose ending 31 Oct 2026 and a reminder to restore prices on 1 Nov. A seasonal window stores its start date in the note (`from:YYYY-MM-DD`).
+- **Real revenue** = placed - fake - reversed (including refunded part of partial refunds). Buckets always add up. Orders are grouped by the day placed (cohort view). Shopify's own reports post a cancellation on the day it happens, so a Shopify month differs; the "Reversals posted" table explains the difference (example: 281 TND of September orders cancelled on 7 Oct).
+- **Final window** raised from 14 to 30 days after reversals arrived up to 22 days late. Order is flagged "needs attention" when still placed or in transit after 7 days.
+- **Export** is generated in the browser (no customer data). **Health check** tests the Meta token live, order counts against Shopify, re-check age, rate, fees, product costs, tracking coverage.
+
+## Known limits
+- 60 days of orders only (no `read_all_orders`); order webhooks off. Both need Shopify approval.
+- The Octobre Rose, Marine Collagen and other campaign names come from Meta; ad entities that never spend are not listed.
+- Break-even is only as good as the product costs and delivery fee entered.
+- The Meta day follows the ad account timezone, orders follow Tunisia time: expect off-by-a-few near midnight.

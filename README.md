@@ -2,15 +2,22 @@
 
 Custom Shopify profit analytics (Profitario-style) for VegaLife, plus a Meta-ads truth layer and decision engine (KILL / PAUSE / WATCH / CALENDAR / SCALE) and Shopify↔Meta reconciliation. Built on the official Shopify React Router app template.
 
-Status: **Milestone 3 — costs and profit.** See `docs/DECISIONS.md` for approved rules and open items.
+Status: **complete (milestones 1 to 8).** Live at https://vegaprofit.onrender.com, installed on dfafa4.myshopify.com. Approved rules and open items: `docs/DECISIONS.md`.
 
-## What is in this milestone
-- Order sync from Shopify (full import, webhooks, 60-day catch-up re-check) with the COD lifecycle: placed, in transit, delivered, cancelled, returned, refunded.
-- Meta attribution fields per order (campaign / ad set / ad), phone-hash duplicate flags, fake-order suggestions with manual exclude.
-- **Costs** page (product costs, courier fees, expenses) and **Profit** page (day by day, gross or net, custom dates).
-- "Orders sync" page in the app. Earlier: schema, Docker, read-only scopes, custom distribution.
+## Pages
+| Page | What it answers |
+|---|---|
+| Profit | Day by day profit, gross or net, before and after ads |
+| Real revenue | What Meta says vs what customers ordered vs what is still standing after cancellations, returns and fakes |
+| Meta ads | Spend, Meta purchases, true orders, true cost per order, break-even, tracking light, daily duplicate check |
+| Decisions | One verdict per campaign / ad set / ad: KILL, PAUSE, WATCH, CALENDAR, SCALE (all thresholds editable) |
+| Calendar | Review dates, campaign end dates, seasonal windows; day, month and range views |
+| Costs | Product costs, courier fees, USD to TND rate, other expenses |
+| Export | CSV of profit, Meta truth tables and orders (no customer data) |
+| Health check | Is the token alive, are orders in sync, what is missing |
+| Orders sync | Import / re-check orders, review fake and duplicate suspects |
 
-> **Verification.** Milestone 1 was installed, migrated and type-checked on Omar's machine. Milestone 2: pure logic is covered by 69 passing tests; services and pages still need `npm run typecheck` and a real install (see section 2).
+> **Verification.** `npm test` (106 tests, plain Node) covers every calculation: lifecycle, attribution, profit, truth layer, verdicts, reconciliation, CSV. Pages and services are type-checked by `npm run typecheck` on a machine with the packages installed.
 
 ## 1. First run on your machine
 Requirements: Node >= 22.12, Docker, Shopify CLI (`npm i -g @shopify/cli`).
@@ -26,33 +33,20 @@ npm run typecheck
 ```
 If `prisma validate` or `typecheck` reports errors, send me the output and I will fix them.
 
-## 2. Install on Shopify (read carefully, order matters)
-Custom apps get protected customer data (phone, email) automatically: **no access request is needed**.
-
-**Step A, development store (free, fastest feedback).**
-1. `npm install -g @shopify/cli` (once).
-2. `npm run config:link` creates/links the app in your Partner organization and writes `client_id` into `shopify.app.toml`.
-3. Create a free **development store** in the Partner dashboard and add a few test orders.
-4. `npm run dev` runs the app through an automatic tunnel and installs it on the dev store.
-5. Open **Orders sync** in the app and click **Import all orders**.
-
-**Step B, your live store (after A works).**
-1. Host the app at a stable https URL (Render free + Neon free, see section 3).
-2. In the Partner dashboard open the app, **Distribution -> Custom distribution**, enter your `.myshopify.com` domain, generate the install link. This choice is permanent.
-3. Open the link as the store owner and approve the read-only scopes.
-4. Click **Import all orders** on the sync page.
+## 2. Install on Shopify (what was actually done)
+The app uses **custom distribution** (permanent choice): Partner dashboard, app, Distribution, Custom distribution, enter the store domain, generate the install link, open it as the store owner. The dev-store preview (`npm run dev`) refuses the Order object, so do not use it for this app; release config changes with `npx shopify app deploy`.
+Scopes (read-only): read_orders, read_products, read_customers, read_fulfillments. `read_all_orders` and order webhooks need Shopify's protected-data approval and are not enabled: the app sees the last 60 days and re-checks them when you open it.
 
 ## 2b. Tests
 `npm test` runs the pure-logic tests with plain Node (no packages needed beyond Node itself).
 
-## 3. Deploy (Railway / Fly.io / any VPS)
-```bash
-docker compose up -d --build      # app on :3000 + Postgres
-```
-Set the env vars from `.env.example` on the host. The container runs `prisma migrate deploy` on start (`docker-start`). On Railway/Fly use their managed Postgres and set `DATABASE_URL`.
+## 3. Hosting (zero cost)
+Render free web service (Docker, auto-deploys on every push to GitHub) plus Neon free Postgres. Render sleeps after 15 minutes idle; the first open takes about a minute. The container runs `prisma migrate deploy` on start.
+Environment variables on Render: SHOPIFY_API_KEY, SHOPIFY_API_SECRET, SHOPIFY_APP_URL, SCOPES, SHOP_CUSTOM_DOMAIN, PII_HASH_SECRET, DATABASE_URL, META_ACCESS_TOKEN, META_AD_ACCOUNT_ID. Never commit them.
 
-## 4. Meta access (needed from M4)
-Create a **system user** in Business Settings, give it the ad account `1630583147626333`, generate a long-lived token with `ads_read`, and put it in `META_ACCESS_TOKEN`. Add the Pixel/dataset id to `META_PIXEL_ID`.
+## 4. Meta access
+Business settings, Users, System users: create `vegaprofit` (Employee), give it the ad account with **View performance**, assign it an app role (Full control on the app), generate a token that never expires with only `ads_read`. Put it in Render as `META_ACCESS_TOKEN` with `META_AD_ACCOUNT_ID`. Meta days follow the ad account timezone. Spend is stored in USD and converted with the rate typed on the Costs page.
+If the token stops working the Health check says so; generate a new one and replace the variable.
 
 ## 5. Recommended Meta URL parameters
 Keep IDs in the UTMs so attribution is exact:

@@ -33,6 +33,8 @@ export default function App() {
         <s-link href="/app/decisions">Decisions</s-link>
         <s-link href="/app/calendar">Calendar</s-link>
         <s-link href="/app/costs">Costs</s-link>
+        <s-link href="/app/export">Export</s-link>
+        <s-link href="/app/health">Health</s-link>
         <s-link href="/app/sync">Orders sync</s-link>
       </s-app-nav>
       <Outlet />
