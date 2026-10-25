@@ -1,7 +1,11 @@
 // Defaults for every tunable number. Overrides live in the `Setting` table (key/value JSON).
 // Verdict thresholds join this list in milestone 6.
 
+import { DEFAULT_RULES } from "./verdict.ts";
+
 export const SETTING_DEFAULTS = {
+  ...DEFAULT_RULES, // verdict thresholds (multiples of break-even cost, edit on the Decisions page)
+  verdict_window_days: 14, // verdicts judge the last N days
   stale_days: 7, // fulfilled but still PENDING after N days => "stale order" alert
   final_after_days: 30, // an order is treated as final only N days after creation
   duplicate_window_hours: 72, // same phone within N hours => possible duplicate
@@ -13,6 +17,8 @@ export const SETTING_DEFAULTS = {
   fee_out: 0, // courier fee in TND for every shipped parcel (set on the Costs page)
   fee_return: 0, // extra courier fee in TND when a parcel comes back
   fx_usd_tnd: 0, // TND per 1 USD for Meta spend (set on the Costs page; 0 = not set yet)
+  tracking_amber_ratio: 1.25, // Meta purchases / Shopify orders above this => tracking AMBER
+  tracking_red_ratio: 1.75, // above this => tracking RED
   meta_sync_interval_hours: 6, // Meta spend is re-synced on app open when older than this
 } as const;
 
